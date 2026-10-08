@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Drawing2D;
 using System.Windows.Forms;
 
 namespace ZhongWenSnap
@@ -191,74 +192,119 @@ namespace ZhongWenSnap
 
     internal sealed class ResultPopup : Form
     {
-        private readonly Timer dismissTimer = new Timer();
         private readonly Rectangle captureBounds;
-        private readonly TranslationResult result;
-        private readonly Action openHistory;
-        private int nextY;
+        private readonly Panel content;
+        private readonly List<Font> popupFonts = new List<Font>();
+        private int contentY;
+        private static readonly Color Canvas = Color.FromArgb(255, 249, 245);
+        private static readonly Color Ink = Color.FromArgb(48, 55, 65);
+        private static readonly Color Muted = Color.FromArgb(112, 120, 126);
+        private static readonly Color Coral = Color.FromArgb(232, 112, 106);
 
         public ResultPopup(Rectangle captureBounds, string title, string message,
             TranslationResult result, Action openHistory)
         {
             this.captureBounds = captureBounds;
-            this.result = result;
-            this.openHistory = openHistory;
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;
             StartPosition = FormStartPosition.Manual;
             KeyPreview = true;
-            AutoScroll = true;
-            BackColor = Color.FromArgb(32, 44, 65);
-            ForeColor = Color.White;
-            Font = new Font("Segoe UI", 10);
-            ClientSize = new Size(460, 100);
-            var header = new Label { Text = title, Location = new Point(15, 11), Size = new Size(390, 24),
-                Font = new Font("Segoe UI", 10, FontStyle.Bold), ForeColor = Color.FromArgb(88, 224, 178) };
+            BackColor = Canvas;
+            ForeColor = Ink;
+            Font = OwnFont("Segoe UI", 10);
+            ClientSize = new Size(480, 160);
+
+            var badge = new PopupBadge { Location = new Point(18, 13), Size = new Size(36, 36) };
+            Controls.Add(badge);
+            var header = new Label { Text = title == "ZHONGWEN SNAP" ? "Your translation" : title,
+                Location = new Point(64, 15), Size = new Size(365, 25),
+                Font = OwnFont("Segoe UI", 11, FontStyle.Bold), ForeColor = Ink };
             Controls.Add(header);
-            var close = new Button { Text = "×", Location = new Point(420, 5), Size = new Size(32, 31),
-                FlatStyle = FlatStyle.Flat, BackColor = BackColor, ForeColor = Color.White, TabStop = false };
+            var close = new Button { Text = "×", Location = new Point(435, 12), Size = new Size(30, 30),
+                FlatStyle = FlatStyle.Flat, BackColor = Canvas, ForeColor = Muted, TabStop = false,
+                Font = OwnFont("Segoe UI", 13) };
             close.FlatAppearance.BorderSize = 0;
             close.Click += (s, e) => Close();
             Controls.Add(close);
-            nextY = 39;
-            if (result == null) AddText(message, 11, Color.White, 10);
+
+            content = new Panel { Location = new Point(18, 61), Width = 444,
+                AutoScroll = true, BackColor = Canvas, TabStop = false };
+            Controls.Add(content);
+            if (result == null)
+                AddField("STATUS", String.IsNullOrWhiteSpace(message) ? "Just a moment…" : message,
+                    OwnFont("Segoe UI", 11), Ink, Color.White);
             else
             {
-                AddText(result.Text, 17, Color.White, 8);
-                AddText(result.Pinyin, 11, Color.FromArgb(88, 224, 178), 6);
-                AddText(result.English, 12, Color.White, 8);
-                AddText(result.Note, 10, Color.FromArgb(190, 206, 222), 9);
-                var copy = new Button { Text = "Copy", Location = new Point(15, nextY + 6), Size = new Size(65, 28) };
-                copy.Click += (s, e) => { Clipboard.SetText(result.Combined()); };
-                Controls.Add(copy);
-                var history = new Button { Text = "History", Location = new Point(88, nextY + 6), Size = new Size(72, 28) };
+                AddField("CHINESE", result.Text, OwnFont("Microsoft JhengHei UI", 17, FontStyle.Bold), Ink, Color.White);
+                AddField("PINYIN", result.Pinyin, OwnFont("Segoe UI", 11), Color.FromArgb(48, 120, 111), Color.White);
+                AddField("ENGLISH", result.English, OwnFont("Segoe UI", 12), Ink, Color.White);
+                AddField("LEARNER NOTE", result.Note, OwnFont("Segoe UI", 10), Ink,
+                    Color.FromArgb(255, 238, 231));
+            }
+
+            var availableHeight = Math.Max(190, Screen.FromRectangle(captureBounds).WorkingArea.Height - 24);
+            content.Height = Math.Min(contentY, Math.Max(75, availableHeight - 118));
+            ClientSize = new Size(480, content.Bottom + 57);
+            content.AutoScrollMinSize = new Size(0, contentY);
+
+            var hint = new Label { Text = "Select text to copy  ·  Esc to close",
+                Location = new Point(20, content.Bottom + 17), Size = new Size(330, 24),
+                ForeColor = Muted, Font = OwnFont("Segoe UI", 8) };
+            Controls.Add(hint);
+            if (result != null)
+            {
+                var history = new Button { Text = "History", Location = new Point(372, content.Bottom + 10),
+                    Size = new Size(90, 32), FlatStyle = FlatStyle.Flat,
+                    BackColor = Color.FromArgb(225, 241, 235), ForeColor = Color.FromArgb(43, 104, 93),
+                    Font = OwnFont("Segoe UI", 9, FontStyle.Bold), TabStop = false };
+                history.FlatAppearance.BorderSize = 0;
                 history.Click += (s, e) => { Close(); openHistory(); };
                 Controls.Add(history);
-                nextY += 38;
             }
-            var desiredHeight = Math.Max(72, nextY + 13);
-            var availableHeight = Math.Max(180, Screen.FromRectangle(captureBounds).WorkingArea.Height - 24);
-            ClientSize = new Size(460, Math.Min(desiredHeight, availableHeight));
-            AutoScrollMinSize = new Size(0, desiredHeight);
             Place();
-            dismissTimer.Interval = 25000;
-            dismissTimer.Tick += (s, e) => Close();
-            Shown += (s, e) => { Activate(); dismissTimer.Start(); };
-            FormClosed += (s, e) => dismissTimer.Dispose();
+            Shown += (s, e) => Activate();
         }
 
-        private void AddText(string text, int size, Color color, int gap)
+        private void AddField(string caption, string value, Font font, Color color, Color fill)
         {
-            if (String.IsNullOrWhiteSpace(text)) return;
-            var font = new Font("Segoe UI", size);
-            var measured = TextRenderer.MeasureText(text, font, new Size(425, 10000),
+            if (String.IsNullOrWhiteSpace(value)) return;
+            var measured = TextRenderer.MeasureText(value, font, new Size(394, 10000),
                 TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
-            var label = new Label { Text = text, Location = new Point(15, nextY + gap),
-                Size = new Size(430, Math.Max(measured.Height + 3, size + 10)),
-                Font = font, ForeColor = color };
-            Controls.Add(label);
-            nextY = label.Bottom;
+            var textHeight = Math.Max(measured.Height + 8, font.Height + 8);
+            var card = new PopupCard(fill) { Location = new Point(9, contentY),
+                Size = new Size(426, textHeight + 48) };
+            var label = new Label { Text = caption, Location = new Point(14, 10), Size = new Size(394, 18),
+                Font = OwnFont("Segoe UI", 8, FontStyle.Bold), ForeColor = Coral, BackColor = fill };
+            card.Controls.Add(label);
+            var text = new TextBox { Text = value, Location = new Point(14, 32),
+                Size = new Size(398, textHeight), Multiline = true, ReadOnly = true,
+                BorderStyle = BorderStyle.None, WordWrap = true, ScrollBars = ScrollBars.None,
+                BackColor = fill, ForeColor = color, Font = font, Cursor = Cursors.IBeam };
+            card.Controls.Add(text);
+            content.Controls.Add(card);
+            contentY += card.Height + 8;
+        }
+
+        private Font OwnFont(string family, float size, FontStyle style = FontStyle.Regular)
+        {
+            var font = new Font(family, size, style);
+            popupFonts.Add(font);
+            return font;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+            if (disposing)
+                foreach (var font in popupFonts) font.Dispose();
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            using (var border = new Pen(Color.FromArgb(232, 219, 212)))
+                e.Graphics.DrawRectangle(border, 0, 0, ClientSize.Width - 1, ClientSize.Height - 1);
         }
 
         private void Place()
@@ -276,6 +322,48 @@ namespace ZhongWenSnap
         {
             if (keyData == Keys.Escape) { Close(); return true; }
             return base.ProcessCmdKey(ref msg, keyData);
+        }
+    }
+
+    internal sealed class PopupBadge : Control
+    {
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var brush = new SolidBrush(Color.FromArgb(232, 112, 106)))
+                e.Graphics.FillEllipse(brush, 0, 0, Width - 1, Height - 1);
+            using (var font = new Font("Microsoft JhengHei UI", 14, FontStyle.Bold))
+                TextRenderer.DrawText(e.Graphics, "中", font, ClientRectangle, Color.White,
+                    TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        }
+    }
+
+    internal sealed class PopupCard : Panel
+    {
+        private readonly Color fill;
+
+        public PopupCard(Color fill)
+        {
+            this.fill = fill;
+            BackColor = Color.FromArgb(255, 249, 245);
+            DoubleBuffered = true;
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using (var path = new GraphicsPath())
+            {
+                int right = Width - 1, bottom = Height - 1;
+                path.AddArc(0, 0, 18, 18, 180, 90);
+                path.AddArc(right - 18, 0, 18, 18, 270, 90);
+                path.AddArc(right - 18, bottom - 18, 18, 18, 0, 90);
+                path.AddArc(0, bottom - 18, 18, 18, 90, 90);
+                path.CloseFigure();
+                using (var brush = new SolidBrush(fill)) e.Graphics.FillPath(brush, path);
+                using (var border = new Pen(Color.FromArgb(241, 227, 220))) e.Graphics.DrawPath(border, path);
+            }
         }
     }
 

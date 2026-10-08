@@ -14,13 +14,24 @@ namespace ZhongWenSnap
 {
     internal sealed class AppSettings
     {
-        public string Hotkey = "Ctrl+Alt+T";
-        public string Model = "gpt-6-luna";
-        public string Prompt =
+        internal const string PreviousDefaultPrompt =
             "Read the main text in the selected image. For Chinese, use Traditional characters " +
             "and Hanyu pinyin with tone marks. Give a natural English translation. Add a " +
             "helpful learner note when relevant; favor Taiwanese Mandarin usage. If no " +
             "Chinese is readable, leave all fields empty.";
+        internal const string DefaultPrompt =
+            "Read the main text in the selected image. For Chinese, use Traditional characters " +
+            "and Hanyu pinyin with tone marks. Give a natural English translation. Add a " +
+            "helpful learner note in English when relevant; favor Taiwanese Mandarin usage. If no " +
+            "Chinese is readable, leave all fields empty.";
+        internal const string MisspelledDefaultPrompt =
+            "Read the main text in the selected image. For Chinese, use Traditional characters " +
+            "and Hanyu pinyin with tone marks. Give a natural English translation. Add a " +
+            "helpful learner note in Engligh when relevant; favor Taiwanese Mandarin usage. If no " +
+            "Chinese is readable, leave all fields empty.";
+        public string Hotkey = "Ctrl+Alt+T";
+        public string Model = "gpt-6-luna";
+        public string Prompt = DefaultPrompt;
         public bool StartWithWindows;
     }
 
@@ -61,6 +72,9 @@ namespace ZhongWenSnap
             settings.Hotkey = GetString(json, "hotkey", settings.Hotkey);
             settings.Model = GetString(json, "model", settings.Model);
             settings.Prompt = GetString(json, "prompt", settings.Prompt);
+            if (settings.Prompt == AppSettings.PreviousDefaultPrompt ||
+                settings.Prompt == AppSettings.MisspelledDefaultPrompt)
+                settings.Prompt = AppSettings.DefaultPrompt;
             settings.StartWithWindows = json.ContainsKey("start_with_windows") && Convert.ToBoolean(json["start_with_windows"]);
             int version;
             if (!json.ContainsKey("settings_version") ||

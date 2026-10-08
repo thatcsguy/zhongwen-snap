@@ -7,7 +7,7 @@ A small Windows 11 tray app for reading and translating text on your screen. Pre
 Download [ZhongWenSnap-Windows.zip](dist/ZhongWenSnap-Windows.zip), extract it, and put `ZhongWenSnap.exe` in a permanent folder. You can also download [the EXE directly](dist/ZhongWenSnap.exe). The app is self-contained apart from the .NET Framework included with Windows 11. It does not need Python, PowerToys, Tesseract, or a separate OCR installation.
 
 1. Open `ZhongWenSnap.exe`. The Settings window appears on first launch. Enter an [OpenAI API key](https://platform.openai.com/api-keys) and save. API billing is separate from ChatGPT subscriptions.
-2. Press **Ctrl+Alt+T** and drag around the text. The popup can be dismissed with **Esc** or **×**; it also closes automatically after 25 seconds.
+2. Press **Ctrl+Alt+T** and drag around the text. Select text in the popup to copy it with **Ctrl+C**. The popup stays open until you press **Esc** or click **×**.
 3. Right-click the green `中` tray icon to capture again, view history, edit Settings, or exit. The tray icon may be under **^** near the clock.
 
 In Settings you can change the global hotkey, model, and prompt, and choose whether to start when you sign in. The default model is `gpt-6-luna`; the app sends an image and asks the model to read and explain it in one request. The prompt controls the translation style and learner note while the popup keeps the same four fields. Select a tight region to improve reading and keep image usage small.
