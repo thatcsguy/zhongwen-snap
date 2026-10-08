@@ -60,9 +60,37 @@ namespace ZhongWenSnap
             base.OnMouseMove(e);
             if (!start.HasValue) return;
             var a = start.Value;
-            selection = Rectangle.FromLTRB(Math.Max(0, Math.Min(a.X, e.X)), Math.Max(0, Math.Min(a.Y, e.Y)),
+            var next = Rectangle.FromLTRB(Math.Max(0, Math.Min(a.X, e.X)), Math.Max(0, Math.Min(a.Y, e.Y)),
                 Math.Min(ClientSize.Width, Math.Max(a.X, e.X)), Math.Min(ClientSize.Height, Math.Max(a.Y, e.Y)));
-            Invalidate();
+            if (selection == next) return;
+            var previous = selection;
+            selection = next;
+            InvalidateSelectionChange(previous, next);
+        }
+
+        private void InvalidateSelectionChange(Rectangle previous, Rectangle next)
+        {
+            // The screenshot and shade only change where the selection enters or leaves.
+            // Repaint both outlines too, since their strokes can cross unchanged pixels.
+            using (var dirty = new Region())
+            {
+                dirty.MakeEmpty();
+                if (previous.Width > 0 && previous.Height > 0) dirty.Union(previous);
+                if (next.Width > 0 && next.Height > 0) dirty.Xor(next);
+                AddOutline(dirty, previous);
+                AddOutline(dirty, next);
+                Invalidate(dirty);
+            }
+        }
+
+        private static void AddOutline(Region dirty, Rectangle box)
+        {
+            if (box.Width < 1 || box.Height < 1) return;
+            const int margin = 2; // A 3-pixel pen extends beyond the selection bounds.
+            dirty.Union(new Rectangle(box.Left - margin, box.Top - margin, box.Width + 2 * margin, 2 * margin + 1));
+            dirty.Union(new Rectangle(box.Left - margin, box.Bottom - margin, box.Width + 2 * margin, 2 * margin + 1));
+            dirty.Union(new Rectangle(box.Left - margin, box.Top - margin, 2 * margin + 1, box.Height + 2 * margin));
+            dirty.Union(new Rectangle(box.Right - margin, box.Top - margin, 2 * margin + 1, box.Height + 2 * margin));
         }
 
         protected override void OnMouseUp(MouseEventArgs e)
@@ -73,8 +101,9 @@ namespace ZhongWenSnap
             start = null;
             if (selection.Width < 20 || selection.Height < 12)
             {
+                var previous = selection;
                 selection = Rectangle.Empty;
-                Invalidate();
+                InvalidateSelectionChange(previous, selection);
                 return;
             }
             SelectedScreenBounds = new Rectangle(Left + selection.Left, Top + selection.Top,
