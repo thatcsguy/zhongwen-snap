@@ -8,7 +8,7 @@ Download [ZhongWenSnap-Windows.zip](dist/ZhongWenSnap-Windows.zip), extract it, 
 
 1. Open `ZhongWenSnap.exe`. The Settings window appears on first launch. Enter an [OpenAI API key](https://platform.openai.com/api-keys) and save. API billing is separate from ChatGPT subscriptions.
 2. Press **Ctrl+Alt+T** and drag around the text. Select text in the popup to copy it with **Ctrl+C**. The popup stays open until you press **Esc** or click **×**.
-3. Right-click the green `中` tray icon to capture again, view history, edit Settings, or exit. The tray icon may be under **^** near the clock.
+3. Right-click the green `中` tray icon to capture again, view history, edit Settings, or exit. The tray icon may be under **^** near the clock. Opening the EXE again while it is running shows a reminder instead of starting a second copy.
 
 In Settings you can change the global hotkey, model, and prompt, and choose whether to start when you sign in. The default model is `gpt-6-luna`; the app sends an image and asks the model to read and explain it in one request. The prompt controls the translation style and learner note while the popup keeps the same four fields. Select a tight region to improve reading and keep image usage small.
 

@@ -7,6 +7,7 @@ using System.Drawing.Text;
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
@@ -30,18 +31,32 @@ namespace ZhongWenSnap
                 SelfTest.Run();
                 return;
             }
-            try
+            bool firstInstance;
+            using (var instance = new Mutex(true, @"Local\ZhongWenSnap", out firstInstance))
             {
-                if (!SetProcessDpiAwarenessContext(new IntPtr(-4))) SetProcessDPIAware();
-            }
-            catch (EntryPointNotFoundException) { SetProcessDPIAware(); }
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-            try { Application.Run(new TrayContext()); }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Could not start ZhongWen Snap: " + ex.Message,
-                    "ZhongWen Snap", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                if (!firstInstance)
+                {
+                    MessageBox.Show("ZhongWen Snap is already running. Use the tray icon near the clock.",
+                        "ZhongWen Snap", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+                try
+                {
+                    try
+                    {
+                        if (!SetProcessDpiAwarenessContext(new IntPtr(-4))) SetProcessDPIAware();
+                    }
+                    catch (EntryPointNotFoundException) { SetProcessDPIAware(); }
+                    Application.EnableVisualStyles();
+                    Application.SetCompatibleTextRenderingDefault(false);
+                    Application.Run(new TrayContext());
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Could not start ZhongWen Snap: " + ex.Message,
+                        "ZhongWen Snap", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                }
+                finally { instance.ReleaseMutex(); }
             }
         }
     }
