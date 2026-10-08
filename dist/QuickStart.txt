@@ -1,0 +1,11 @@
+ZhongWen Snap for Windows 11
+
+1. Place ZhongWenSnap.exe in a permanent folder and double-click it.
+2. In Settings, enter an OpenAI API key and save.
+   Create a key at https://platform.openai.com/api-keys
+3. Press Ctrl+Alt+T, then drag around the text you want to translate.
+4. Right-click the green system tray icon to change the hotkey, model, prompt, or startup setting.
+
+An internet connection and separately billed OpenAI API access are required.
+Exit any earlier version from the system tray before starting this one.
+The EXE is unsigned, so Windows may ask you to review it before first run.

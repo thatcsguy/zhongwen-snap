@@ -1,0 +1,8 @@
+work/
+*.pdb
+*.tmp
+*.user
+*.suo
+key.bin
+settings.json
+history.jsonl
