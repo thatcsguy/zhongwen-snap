@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows.Forms;
 
 namespace ZhongWenSnap
@@ -224,6 +226,23 @@ namespace ZhongWenSnap
         private readonly Rectangle captureBounds;
         private readonly Panel content;
         private readonly List<Font> popupFonts = new List<Font>();
+        private readonly FollowUpConversation conversation;
+        private readonly Label hint;
+        private readonly Button historyButton;
+        private readonly Button askButton;
+        private readonly Panel composer;
+        private readonly AskTextBox questionBox;
+        private readonly Button sendButton;
+        private readonly Button resetButton;
+        private readonly Label chatHint;
+        private readonly Font chatFont;
+        private readonly Font captionFont;
+        private readonly int translationHeight;
+        private readonly int translationCards;
+        private CancellationTokenSource requestCancellation;
+        private Control errorCard;
+        private bool chatOpen;
+        private bool answering;
         private int contentY;
         private static readonly Color Canvas = Color.FromArgb(255, 249, 245);
         private static readonly Color Ink = Color.FromArgb(48, 55, 65);
@@ -231,9 +250,10 @@ namespace ZhongWenSnap
         private static readonly Color Coral = Color.FromArgb(232, 112, 106);
 
         public ResultPopup(Rectangle captureBounds, string title, string message,
-            TranslationResult result, Action openHistory)
+            TranslationResult result, Action openHistory, FollowUpConversation conversation = null)
         {
             this.captureBounds = captureBounds;
+            this.conversation = conversation;
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;
@@ -242,6 +262,7 @@ namespace ZhongWenSnap
             BackColor = Canvas;
             ForeColor = Ink;
             Font = OwnFont("Segoe UI", 10);
+            captionFont = OwnFont("Segoe UI", 8, FontStyle.Bold);
             ClientSize = new Size(480, 160);
 
             var badge = new PopupBadge { Location = new Point(18, 13), Size = new Size(36, 36) };
@@ -272,47 +293,195 @@ namespace ZhongWenSnap
                     Color.FromArgb(255, 238, 231));
             }
 
-            var availableHeight = Math.Max(190, Screen.FromRectangle(captureBounds).WorkingArea.Height - 24);
-            content.Height = Math.Min(contentY, Math.Max(75, availableHeight - 118));
-            ClientSize = new Size(480, content.Bottom + 57);
-            content.AutoScrollMinSize = new Size(0, contentY);
+            translationHeight = contentY;
+            translationCards = content.Controls.Count;
+            chatFont = OwnFont("Microsoft JhengHei UI", 11);
 
-            var hint = new Label { Text = "Select text to copy  ·  Esc to close",
-                Location = new Point(20, content.Bottom + 17), Size = new Size(330, 24),
+            hint = new Label { Text = "Select text to copy  ·  Esc to close",
+                Size = new Size(252, 24),
                 ForeColor = Muted, Font = OwnFont("Segoe UI", 8) };
             Controls.Add(hint);
             if (result != null)
             {
-                var history = new Button { Text = "History", Location = new Point(372, content.Bottom + 10),
+                historyButton = new Button { Text = "History",
                     Size = new Size(90, 32), FlatStyle = FlatStyle.Flat,
                     BackColor = Color.FromArgb(225, 241, 235), ForeColor = Color.FromArgb(43, 104, 93),
                     Font = OwnFont("Segoe UI", 9, FontStyle.Bold), TabStop = false };
-                history.FlatAppearance.BorderSize = 0;
-                history.Click += (s, e) => { Close(); openHistory(); };
-                Controls.Add(history);
+                historyButton.FlatAppearance.BorderSize = 0;
+                historyButton.Click += (s, e) => { Close(); openHistory(); };
+                Controls.Add(historyButton);
             }
-            Place();
+            if (conversation != null)
+            {
+                askButton = ChatButton("Ask", "Ask", 82, 32);
+                askButton.Click += (s, e) => OpenChat();
+                Controls.Add(askButton);
+
+                composer = new Panel { Name = "Composer", Size = new Size(444, 118), Visible = false, BackColor = Canvas };
+                composer.Controls.Add(new Label { Text = "ASK ABOUT THIS TRANSLATION",
+                    Location = Point.Empty, Size = new Size(340, 18), ForeColor = Coral,
+                    Font = captionFont });
+                questionBox = new AskTextBox { Name = "Question", Location = new Point(0, 24),
+                    Size = new Size(348, 62), Multiline = true, AcceptsReturn = true,
+                    WordWrap = true, ScrollBars = ScrollBars.Vertical, Font = chatFont,
+                    MaxLength = FollowUpConversation.MaxQuestionLength, AccessibleName = "Question about this translation" };
+                questionBox.SendRequested += SendQuestion;
+                composer.Controls.Add(questionBox);
+                sendButton = ChatButton("Send", "Send", 86, 32);
+                sendButton.Location = new Point(358, 24);
+                sendButton.Click += (s, e) => SendQuestion();
+                composer.Controls.Add(sendButton);
+                resetButton = ChatButton("ResetChat", "Reset chat", 86, 26);
+                resetButton.Location = new Point(358, 61);
+                resetButton.Font = OwnFont("Segoe UI", 8);
+                resetButton.Click += (s, e) => ResetChat();
+                composer.Controls.Add(resetButton);
+                chatHint = new Label { Text = "Enter to send  ·  Shift+Enter for newline",
+                    Location = new Point(0, 94), Size = new Size(444, 22), ForeColor = Muted,
+                    Font = OwnFont("Segoe UI", 8) };
+                composer.Controls.Add(chatHint);
+                Controls.Add(composer);
+            }
+            LayoutPopup(false);
             Shown += (s, e) => Activate();
         }
 
-        private void AddField(string caption, string value, Font font, Color color, Color fill)
+        private Button ChatButton(string name, string text, int width, int height)
         {
-            if (String.IsNullOrWhiteSpace(value)) return;
-            var measured = TextRenderer.MeasureText(value, font, new Size(394, 10000),
+            var button = new Button { Name = name, Text = text, Size = new Size(width, height),
+                FlatStyle = FlatStyle.Flat, BackColor = Color.FromArgb(255, 224, 216), ForeColor = Ink,
+                Font = OwnFont("Segoe UI", 9, FontStyle.Bold) };
+            button.FlatAppearance.BorderSize = 0;
+            return button;
+        }
+
+        private void OpenChat()
+        {
+            chatOpen = true;
+            askButton.Visible = false;
+            composer.Visible = true;
+            LayoutPopup(false);
+            questionBox.Focus();
+        }
+
+        private async void SendQuestion()
+        {
+            if (answering || conversation == null || conversation.AtLimit) return;
+            var question = questionBox.Text.Trim();
+            if (String.IsNullOrWhiteSpace(question)) return;
+            ClearError();
+            answering = true;
+            questionBox.ReadOnly = true;
+            sendButton.Enabled = resetButton.Enabled = false;
+            chatHint.Text = "Answering…";
+            var cancellation = new CancellationTokenSource();
+            requestCancellation = cancellation;
+            try
+            {
+                var answer = await Task.Run(() => conversation.Ask(question, cancellation.Token));
+                if (IsDisposed || Disposing || cancellation.IsCancellationRequested) return;
+                content.AutoScrollPosition = Point.Empty;
+                AddField("YOU", question, chatFont, Ink, Color.FromArgb(225, 241, 235));
+                AddField("ANSWER", answer, chatFont, Ink, Color.White);
+                questionBox.Clear();
+                LayoutPopup(true);
+            }
+            catch (OperationCanceledException) { /* Closing the popup abandons its conversation. */ }
+            catch (Exception ex)
+            {
+                if (IsDisposed || Disposing || cancellation.IsCancellationRequested) return;
+                content.AutoScrollPosition = Point.Empty;
+                errorCard = AddField("COULD NOT ANSWER", ex.Message, chatFont, Ink, Color.FromArgb(255, 238, 231));
+                LayoutPopup(true);
+            }
+            finally
+            {
+                if (!IsDisposed && !Disposing && !cancellation.IsCancellationRequested)
+                {
+                    answering = false;
+                    questionBox.ReadOnly = conversation.AtLimit;
+                    sendButton.Enabled = !conversation.AtLimit;
+                    resetButton.Enabled = true;
+                    chatHint.Text = conversation.AtLimit ? "Chat limit reached  ·  Reset chat to continue" :
+                        "Enter to send  ·  Shift+Enter for newline";
+                    questionBox.Focus();
+                }
+                requestCancellation = null;
+                cancellation.Dispose();
+            }
+        }
+
+        private void ClearError()
+        {
+            if (errorCard == null) return;
+            content.AutoScrollPosition = Point.Empty;
+            contentY -= errorCard.Height + 8;
+            content.Controls.Remove(errorCard);
+            errorCard.Dispose();
+            errorCard = null;
+            LayoutPopup(false);
+        }
+
+        private void ResetChat()
+        {
+            if (answering) return;
+            conversation.Reset();
+            content.AutoScrollPosition = Point.Empty;
+            while (content.Controls.Count > translationCards)
+            {
+                var card = content.Controls[content.Controls.Count - 1];
+                content.Controls.Remove(card);
+                card.Dispose();
+            }
+            errorCard = null;
+            contentY = translationHeight;
+            questionBox.Clear();
+            questionBox.ReadOnly = false;
+            sendButton.Enabled = true;
+            chatHint.Text = "Enter to send  ·  Shift+Enter for newline";
+            LayoutPopup(false);
+            questionBox.Focus();
+        }
+
+        private void LayoutPopup(bool scrollToLatest)
+        {
+            var availableHeight = Math.Max(1, Screen.FromRectangle(captureBounds).WorkingArea.Height - 24);
+            var composerHeight = chatOpen ? 128 : 0;
+            var desiredHeight = chatOpen ? Math.Min(480, Math.Max(280, contentY)) : contentY;
+            content.Height = Math.Min(desiredHeight, Math.Max(1, availableHeight - 118 - composerHeight));
+            content.AutoScrollMinSize = new Size(0, contentY);
+            if (composer != null) composer.Location = new Point(18, content.Bottom + 10);
+            var footerTop = content.Bottom + composerHeight;
+            hint.Location = new Point(20, footerTop + 17);
+            if (historyButton != null) historyButton.Location = new Point(372, footerTop + 10);
+            if (askButton != null) askButton.Location = new Point(280, footerTop + 10);
+            ClientSize = new Size(480, footerTop + 57);
+            Place();
+            if (scrollToLatest) content.AutoScrollPosition = new Point(0, contentY);
+        }
+
+        private Control AddField(string caption, string value, Font font, Color color, Color fill)
+        {
+            if (String.IsNullOrWhiteSpace(value)) return null;
+            // Native Windows textboxes need CRLF, and cards must leave room for a vertical scrollbar.
+            value = value.Replace("\r\n", "\n").Replace("\r", "\n").Replace("\n", Environment.NewLine);
+            var cardWidth = content.Width - 18 - SystemInformation.VerticalScrollBarWidth;
+            var measured = TextRenderer.MeasureText(value, font, new Size(cardWidth - 32, 10000),
                 TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl);
             var textHeight = Math.Max(measured.Height + 8, font.Height + 8);
             var card = new PopupCard(fill) { Location = new Point(9, contentY),
-                Size = new Size(426, textHeight + 48) };
-            var label = new Label { Text = caption, Location = new Point(14, 10), Size = new Size(394, 18),
-                Font = OwnFont("Segoe UI", 8, FontStyle.Bold), ForeColor = Coral, BackColor = fill };
+                Size = new Size(cardWidth, textHeight + 48) };
+            var label = new Label { Text = caption, Location = new Point(14, 10), Size = new Size(cardWidth - 28, 18),
+                Font = captionFont, ForeColor = Coral, BackColor = fill };
             card.Controls.Add(label);
             var text = new TextBox { Text = value, Location = new Point(14, 32),
-                Size = new Size(398, textHeight), Multiline = true, ReadOnly = true,
+                Size = new Size(cardWidth - 28, textHeight), Multiline = true, ReadOnly = true,
                 BorderStyle = BorderStyle.None, WordWrap = true, ScrollBars = ScrollBars.None,
                 BackColor = fill, ForeColor = color, Font = font, Cursor = Cursors.IBeam };
             card.Controls.Add(text);
             content.Controls.Add(card);
             contentY += card.Height + 8;
+            return card;
         }
 
         private Font OwnFont(string family, float size, FontStyle style = FontStyle.Regular)
@@ -324,6 +493,7 @@ namespace ZhongWenSnap
 
         protected override void Dispose(bool disposing)
         {
+            if (disposing && requestCancellation != null) requestCancellation.Cancel();
             base.Dispose(disposing);
             if (disposing)
                 foreach (var font in popupFonts) font.Dispose();
@@ -349,8 +519,34 @@ namespace ZhongWenSnap
 
         protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
         {
+            if (questionBox != null && questionBox.Focused && questionBox.IsComposing)
+                return base.ProcessCmdKey(ref msg, keyData);
             if (keyData == Keys.Escape) { Close(); return true; }
             return base.ProcessCmdKey(ref msg, keyData);
+        }
+    }
+
+    internal sealed class AskTextBox : TextBox
+    {
+        public event Action SendRequested;
+        internal bool IsComposing { get; private set; }
+
+        protected override void WndProc(ref Message message)
+        {
+            if (message.Msg == 0x010D) IsComposing = true; // WM_IME_STARTCOMPOSITION
+            if (message.Msg == 0x010E) IsComposing = false; // WM_IME_ENDCOMPOSITION
+            base.WndProc(ref message);
+        }
+
+        protected override void OnKeyDown(KeyEventArgs e)
+        {
+            if (e.KeyData == Keys.Enter && !IsComposing)
+            {
+                e.SuppressKeyPress = true;
+                if (SendRequested != null) SendRequested();
+                return;
+            }
+            base.OnKeyDown(e);
         }
     }
 

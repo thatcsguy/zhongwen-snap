@@ -5,6 +5,9 @@ ZhongWen Snap for Windows 11
    Create a key at https://platform.openai.com/api-keys
 3. Press Ctrl+Alt+T, then drag around the text you want to translate.
 4. Right-click the green system tray icon to change the hotkey, model, prompt, or startup setting.
+5. Click Ask in a translation popup to ask about its text or grammar.
+   Enter sends; Shift+Enter adds a newline. Keep asking for clarification.
+   Reset chat starts over. Closing the popup discards the chat; it is not saved to History.
 
 An internet connection and separately billed OpenAI API access are required.
 Exit any earlier version from the system tray before starting this one.

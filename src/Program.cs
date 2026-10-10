@@ -337,7 +337,9 @@ namespace ZhongWenSnap
             ClosePopup();
             if (selected == Rectangle.Empty)
                 selected = new Rectangle(Cursor.Position.X, Cursor.Position.Y, 1, 1);
-            popup = new ResultPopup(selected, title, message, result, ShowHistory);
+            var conversation = result == null ? null :
+                new FollowUpConversation(result, new OpenAiTutor(TryLoadKey(), settings.Model));
+            popup = new ResultPopup(selected, title, message, result, ShowHistory, conversation);
             popup.Show();
         }
 
