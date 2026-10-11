@@ -325,7 +325,7 @@ namespace ZhongWenSnap
             {
                 if (answering) throw new InvalidOperationException("Wait for the current answer first.");
                 if (turns >= MaxTurns || conversationLength + question.Length > MaxConversationLength)
-                    throw new InvalidOperationException("This chat has reached its limit. Choose Reset chat to continue.");
+                    throw new InvalidOperationException("This chat has reached its limit. Capture again to start a new chat.");
                 cancellation.ThrowIfCancellationRequested();
                 previous = history.ToArray();
                 answering = true;
@@ -347,16 +347,6 @@ namespace ZhongWenSnap
                 return reply.Text;
             }
             finally { lock (gate) answering = false; }
-        }
-
-        public void Reset()
-        {
-            lock (gate)
-            {
-                if (answering) throw new InvalidOperationException("Wait for the current answer first.");
-                history.Clear();
-                turns = conversationLength = 0;
-            }
         }
     }
 

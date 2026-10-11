@@ -36,8 +36,7 @@ namespace ZhongWenSnap
             {
                 if (!firstInstance)
                 {
-                    MessageBox.Show("ZhongWen Snap is already running. Use the tray icon near the clock.",
-                        "ZhongWen Snap", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    AppDialog.Show("ZhongWen Snap is already running. Use the tray icon near the clock.", "ZhongWen Snap");
                     return;
                 }
                 try
@@ -53,8 +52,7 @@ namespace ZhongWenSnap
                 }
                 catch (Exception ex)
                 {
-                    MessageBox.Show("Could not start ZhongWen Snap: " + ex.Message,
-                        "ZhongWen Snap", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    AppDialog.Show("Could not start ZhongWen Snap: " + ex.Message, "ZhongWen Snap");
                 }
                 finally { instance.ReleaseMutex(); }
             }
@@ -194,7 +192,7 @@ namespace ZhongWenSnap
             hotkey.Pressed += BeginCapture;
             var shortcutError = "";
             if (!hotkey.Change(settings.Hotkey, out shortcutError))
-                MessageBox.Show(shortcutError, "Shortcut unavailable", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                AppDialog.Show(shortcutError, "Shortcut unavailable");
 
             var menu = new ContextMenuStrip();
             menu.Items.Add("Capture region", null, (s, e) => BeginCapture());
@@ -202,6 +200,7 @@ namespace ZhongWenSnap
             menu.Items.Add("Settings", null, (s, e) => ShowSettings());
             menu.Items.Add(new ToolStripSeparator());
             menu.Items.Add("Exit", null, (s, e) => ExitThread());
+            AppTheme.Apply(menu);
             trayIcon = CreateTrayIcon();
             tray = new NotifyIcon { Text = "ZhongWen Snap", Icon = trayIcon,
                 ContextMenuStrip = menu, Visible = true };
@@ -270,7 +269,7 @@ namespace ZhongWenSnap
                 historyForm.Show();
                 historyForm.Activate();
             }
-            catch (Exception ex) { MessageBox.Show("Could not open history: " + ex.Message); }
+            catch (Exception ex) { AppDialog.Show("Could not open history: " + ex.Message, "History"); }
         }
 
         private void BeginCapture()
@@ -334,12 +333,15 @@ namespace ZhongWenSnap
 
         private void ShowPopup(Rectangle selected, string title, string message, TranslationResult result)
         {
+            Point? draggedLocation = popup != null && !popup.IsDisposed && popup.HasBeenDragged ?
+                (Point?)popup.DraggedLocation : null;
             ClosePopup();
             if (selected == Rectangle.Empty)
                 selected = new Rectangle(Cursor.Position.X, Cursor.Position.Y, 1, 1);
             var conversation = result == null ? null :
                 new FollowUpConversation(result, new OpenAiTutor(TryLoadKey(), settings.Model));
-            popup = new ResultPopup(selected, title, message, result, ShowHistory, conversation);
+            popup = new ResultPopup(selected, title, message, result, conversation);
+            if (draggedLocation.HasValue) popup.RestoreDraggedLocation(draggedLocation.Value);
             popup.Show();
         }
 
